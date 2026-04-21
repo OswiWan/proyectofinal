@@ -1,0 +1,58 @@
+name: CD - Deploy to DOKS
+
+# Este workflow se dispara después de que el CI (build-and-push) termina en main.
+# Hace helm upgrade contra el cluster de DigitalOcean Kubernetes.
+#
+# Requisitos para activarlo:
+# 1. Tener un cluster DOKS creado.
+# 2. Guardar estos secrets en GitHub → Settings → Secrets and variables → Actions:
+#    - DIGITALOCEAN_ACCESS_TOKEN: token de API de DO (Full access)
+#    - DOKS_CLUSTER_NAME: nombre del cluster (ej. proyectofinal-cluster)
+
+on:
+  # De momento solo manual. Cuando DOKS esté listo y los secrets
+  # configurados, descomentar el bloque workflow_run para que se
+  # dispare solo después de cada CI exitoso en main:
+  #
+  # workflow_run:
+  #   workflows: ["CI - Build and Push Images"]
+  #   types: [completed]
+  #   branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Solo correr si el CI pasó en verde
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save DOKS kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ secrets.DOKS_CLUSTER_NAME }} --expiry-seconds 600
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: latest
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install xhoswi k8s/charts/xhoswi/ \
+            --namespace xhoswi --create-namespace \
+            --set services.auth-service.image=ghcr.io/oswiwan/proyectofinal/auth-service:latest \
+            --set services.catalog-service.image=ghcr.io/oswiwan/proyectofinal/catalog-service:latest \
+            --set services.streaming-service.image=ghcr.io/oswiwan/proyectofinal/streaming-service:latest \
+            --wait --timeout 5m
+
+      - name: Verificar el deploy
+        run: |
+          kubectl get pods -n xhoswi
+          kubectl get svc -n xhoswi
