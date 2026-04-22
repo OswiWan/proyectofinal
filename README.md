@@ -1,4 +1,4 @@
-# 🎬 Xhoswi — Plataforma de Streaming de Video
+# 🎬 UPV Prime — Plataforma de Streaming de Video
 
 Mini-plataforma de streaming tipo Netflix construida como **proyecto de orquestación de microservicios con Kubernetes**.
 
